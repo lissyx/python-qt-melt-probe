@@ -176,7 +176,7 @@ class MeltSourceViewer(QsciScintilla):
 class MeltCommandDispatcher(QObject, Thread):
     FILES = {}
     MARKS = {}
-    QUEUE_MUTEX = QMutex()
+    QUEUE_MARKLOCATION_MUTEX = QMutex()
     SHOWFILE_READY = {}
     QUEUE_MARKLOCATION = {}
 
@@ -220,16 +220,16 @@ class MeltCommandDispatcher(QObject, Thread):
                 self.FILES[filenum]['marks'][marknum] = obj
             # If SHOWFILE interface has not been completed, enqueue, and we will dequeue
             # when the interface is ready
-            self.QUEUE_MUTEX.lock()
+            self.QUEUE_MARKLOCATION_MUTEX.lock()
             if not self.SHOWFILE_READY.has_key(filenum):
                 try:
                     self.QUEUE_MARKLOCATION[filenum] += [ obj ]
                 except KeyError as e:
                     self.QUEUE_MARKLOCATION[filenum] = [ obj ]
                 finally:
-                    self.QUEUE_MUTEX.unlock()
+                    self.QUEUE_MARKLOCATION_MUTEX.unlock()
                 return
-            self.QUEUE_MUTEX.unlock()
+            self.QUEUE_MARKLOCATION_MUTEX.unlock()
         elif cmd == "STARTINFOLOC_PCD":
             marknum = int(o[1])
             filenum = self.MARKS[marknum]
@@ -249,13 +249,13 @@ class MeltCommandDispatcher(QObject, Thread):
         self.emit(MELT_SIGNAL_ASK_INFOLOCATION, "INFOLOCATION_prq " + str(obj['marknum']))
 
     def slot_showfileComplete(self, filenum):
-        self.QUEUE_MUTEX.lock()
+        self.QUEUE_MARKLOCATION_MUTEX.lock()
         queue = self.QUEUE_MARKLOCATION[filenum]
         # print "SHOWFILE has been completed for", filenum, "QUEUED:", queue
         for obj in queue:
             self.emit(MELT_SIGNAL_SOURCE_MARKLOCATION, obj)
         self.SHOWFILE_READY[filenum] = True
-        self.QUEUE_MUTEX.unlock()
+        self.QUEUE_MARKLOCATION_MUTEX.unlock()
 
 class MeltCommunication(QObject, Thread):
     def __init__(self, fdin, fdout):
