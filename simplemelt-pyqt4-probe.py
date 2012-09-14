@@ -35,11 +35,11 @@ MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
 class MeltSourceViewer(QsciScintilla):
     ARROW_MARKER_NUM = 8
-    indicators = {}
 
     def __init__(self, parent, obj):
         QsciScintilla.__init__(self, parent)
 
+        self.indicators = {}
         self.file = obj
         self.setReadOnly(True)
         self.setObjectName("MeltSourceViewer:" + self.file['filename'])
