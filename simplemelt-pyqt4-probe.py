@@ -26,15 +26,19 @@ MELT_SIGNAL_SOURCE_MARKLOCATION = SIGNAL("sourceMarklocation(PyQt_PyObject)")
 MELT_SIGNAL_SOURCE_INFOLOCATION = SIGNAL("sourceInfoLocation(PyQt_PyObject)")
 MELT_SIGNAL_ASK_INFOLOCATION = SIGNAL("askInfoLocation(PyQt_PyObject)")
 
+MELT_SIGNAL_SOURCE_STARTINFOLOC = SIGNAL("startInfoLocation(PyQt_PyObject)")
+MELT_SIGNAL_SOURCE_ADDINFOLOC = SIGNAL("addInfoLocation(PyQt_PyObject)")
+
 class MeltSourceViewer(QsciScintilla):
     ARROW_MARKER_NUM = 8
     indicators = {}
 
-    def __init__(self, parent, lexer):
+    def __init__(self, parent, obj):
         QsciScintilla.__init__(self, parent)
 
+        self.file = obj
         self.setReadOnly(True)
-        self.setObjectName("MeltSourceViewer")
+        self.setObjectName("MeltSourceViewer:" + self.file['filename'])
         self.indicator = self.indicatorDefine(QsciScintilla.BoxIndicator)
 
         # Set the default font
@@ -80,7 +84,7 @@ class MeltSourceViewer(QsciScintilla):
         # courier.
         #
         ## lexer.setDefaultFont(font)
-        self.setLexer(lexer)
+        self.setLexer(self.select_lexer(self.file['filename']))
         ## self.SendScintilla(QsciScintilla.SCI_STYLESETFONT, 1, 'Courier')
 
         # Don't want to see the horizontal scrollbar at all
@@ -91,6 +95,29 @@ class MeltSourceViewer(QsciScintilla):
         # not too small
         self.setMinimumSize(600, 450)
 
+        self.append(self.read_file(self.file['filename']))
+
+    def get_filenum(self):
+        return self.file['filenum']
+
+    def select_lexer(self, filename):
+        lexer = QsciLexerBash()
+        fname, ext = os.path.splitext(filename)
+
+        if ext == ".c" or ext == ".cpp" or ext == ".h" or ext == ".hpp":
+            lexer = QsciLexerCPP()
+
+        return lexer
+
+    def read_file(self, filename):
+        if filename == "<built-in>":
+            return "Pseudo file, built-in."
+
+        content = ""
+        with open(filename) as f:
+            content = f.readlines()
+        return "".join(content)
+
     def mark_location(self, o):
         lineFrom = o['line']
         indexFrom = o['col']
@@ -99,7 +126,7 @@ class MeltSourceViewer(QsciScintilla):
         self.indicators[str(lineFrom) + ":" + str(indexFrom)] = o
         self.fillIndicatorRange(lineFrom, indexFrom, lineTo, indexTo, self.indicator)
         self.markerAdd(lineFrom, self.ARROW_MARKER_NUM)
-        # print "adding marker on line", lineFrom
+        print self.file['filename'], "::adding marker on line", lineFrom
 
     def on_margin_clicked(self, nmargin, nline, modifiers):
         # Toggle marker for the line the margin was clicked on
@@ -111,16 +138,26 @@ class MeltSourceViewer(QsciScintilla):
     def on_indicator_clicked(self, line, index, state):
         # print "on_indicator_clicked(", self, ", ", line, ", ", index, ", ", state, ")"
         indic = self.indicators[str(line) + ":" + str(index)]
-        self.emit(MELT_SIGNAL_ASK_INFOLOCATION, indic)
+        self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, indic)
+
+    def slot_marklocation(self, o):
+        if (self.file['filenum'] == o['filenum']):
+            self.mark_location(o)
+
+    def slot_startinfolocation(self, o):
+        if (self.file['filenum'] == o['filenum']):
+            print "slot_startinfolocation(", o,")"
+
+    def slot_addinfolocation(self, o):
+        if (self.file['filenum'] == o['filenum']):
+            print "slot_addinfolocation(", o,")"
 
 class MeltCommandDispatcher(QObject):
     FILES = {}
     MARKS = {}
 
-    def __init__(self, trace, source):
+    def __init__(self):
         QObject.__init__(self)
-        self.trace  = trace
-        self.source = source
 
     def slot_unhandledCommand(self, cmd):
         print "E: Unhandled command:", cmd
@@ -136,25 +173,36 @@ class MeltCommandDispatcher(QObject):
         cmd = o[0]
         if cmd == "SHOWFILE_PCD":
             fnum = int(o[4])
-            obj = {'command': 'showfile', 'filename': o[2], 'filenum': fnum}
+            obj = {'command': 'showfile', 'filename': o[2].strip('"'), 'filenum': fnum}
             sig = MELT_SIGNAL_SOURCE_SHOWFILE
             if not self.FILES.has_key(fnum):
-                self.FILES[fnum] = obj
+                self.FILES[fnum] = {'file': obj, 'marks': {}}
         elif cmd == "MARKLOCATION_PCD":
             # -1 pour corriger l'affichage
             marknum = int(o[1])
-            obj = {'command': 'marklocation', 'marknum': marknum, 'filenum': int(o[2]), 'line': max(int(o[3]) - 1, 0), 'col': max(int(o[4]) - 1, 0)}
+            filenum = int(o[2])
+            obj = {'command': 'marklocation', 'marknum': marknum, 'filenum': filenum, 'line': max(int(o[3]) - 1, 0), 'col': max(int(o[4]) - 1, 0)}
             sig = MELT_SIGNAL_SOURCE_MARKLOCATION
             if not self.MARKS.has_key(marknum):
-                self.MARKS[marknum] = obj
+                self.MARKS[marknum] = filenum
+                self.FILES[filenum]['marks'][marknum] = obj
         elif cmd == "STARTINFOLOC_PCD":
-            obj = {'command': 'startinfoloc', 'marknum': int(o[1])}
+            marknum = int(o[1])
+            filenum = self.MARKS[marknum]
+            obj = {'command': 'startinfoloc', 'marknum': marknum, 'filenum': filenum}
+            sig = MELT_SIGNAL_SOURCE_STARTINFOLOC
         elif cmd == "ADDINFOLOC_PCD":
-            obj = {'command': 'addinfoloc', 'marknum': int(o[1]),  'payload': " ".join(o[2:]).split('"   "')}
+            marknum = int(o[1])
+            filenum = self.MARKS[marknum]
+            obj = {'command': 'addinfoloc', 'marknum': marknum, 'filenum': filenum, 'payload': " ".join(o[2:]).split('"   "')}
+            sig = MELT_SIGNAL_SOURCE_ADDINFOLOC
 
         print "Dispatcher emit:", sig, obj
 
         self.emit(sig, obj)
+
+    def slot_sendInfoLocation(self, obj):
+        self.emit(MELT_SIGNAL_ASK_INFOLOCATION, "INFOLOCATION_prq " + str(obj['marknum']))
 
 class MeltCommunication(QObject, Thread):
     def __init__(self, fdin, fdout):
@@ -195,8 +243,8 @@ class MeltCommunication(QObject, Thread):
         self.emit(MELT_SIGNAL_APPEND_TRACE_REQUEST, str)
         return os.write(self.melt_stdin, str + "\n\n")
 
-    def slot_sendInfoLocation(self, obj):
-        self.send_melt_command("INFOLOCATION_prq " + str(obj['marknum']))
+    def slot_sendInfoLocation(self, cmd):
+        self.send_melt_command(cmd)
 
 class MeltTraceWindow(QMainWindow, Thread):
     def __init__(self):
@@ -224,12 +272,15 @@ class MeltTraceWindow(QMainWindow, Thread):
         self.text.append(str)
 
 class MeltSourceWindow(QMainWindow, Thread):
-    def __init__(self):
+    def __init__(self, dispatcher, comm):
         Thread.__init__(self)
         super(MeltSourceWindow, self).__init__()
+        self.dispatcher = dispatcher
+        self.comm = comm
+        self.filemaps = {}
         self.initUI()
 
-        self.filemaps = {}
+        QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
 
     def initUI(self):
         window = QWidget()
@@ -243,65 +294,34 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.setWindowTitle("MELT Source Window")
         self.show()
 
-
     def run(self):
         print "I'm", self.getName()
         pass
 
-    def select_lexer(self, filename):
-        lexer = QsciLexerBash()
-        fname, ext = os.path.splitext(filename)
-
-        if ext == ".c" or ext == ".cpp" or ext == ".h" or ext == ".hpp":
-            lexer = QsciLexerCPP()
-
-        return lexer
-
     def get_filename(self, path):
         (dir, fname) = os.path.split(path)
         return fname
-
-    def read_file(self, filename):
-        if filename == "<built-in>":
-            return "Pseudo file, built-in."
-
-        content = ""
-        with open(filename) as f:
-            content = f.readlines()
-        return "".join(content)
 
     def slot_showfile(self, o):
         qw = QWidget()
         layout = QVBoxLayout()
         qw.setLayout(layout)
 
-        filename = o['filename'].strip('"')
-
-        if os.path.exists(filename) or filename == "<built-in>":
-            txt = MeltSourceViewer(qw, self.select_lexer(filename))
-            txt.append(self.read_file(filename))
+        if os.path.exists(o['filename']) or o['filename'] == "<built-in>":
+            txt = MeltSourceViewer(qw, o)
+            QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
+            QObject.connect(txt, MELT_SIGNAL_SOURCE_INFOLOCATION, self.dispatcher.slot_sendInfoLocation, Qt.QueuedConnection)
+            QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_STARTINFOLOC, txt.slot_startinfolocation, Qt.QueuedConnection)
+            QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_ADDINFOLOC, txt.slot_addinfolocation, Qt.QueuedConnection)
             layout.addWidget(txt)
-            self.connect(txt, MELT_SIGNAL_ASK_INFOLOCATION, self.slot_ask_infoLocation, Qt.QueuedConnection)
-            self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(filename)})
+            self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
+            print "mapping",o['filenum'],"with object:",txt.objectName()
         else:
-            print "Unable to open '%(file)s'" % {'file': filename}
+            print "Unable to open '%(file)s'" % {'file': o['filename']}
             return
-            err = QErrorMessage("Unable to open '%(file)s'" % {'file': filename})
+            err = QErrorMessage("Unable to open '%(file)s'" % {'file': o['filename']})
             err.showMessage()
-
-    def slot_marklocation(self, o):
-        # o = {'command': 'marklocation', 'marknum': o[1], 'filenum': o[2], 'line': o[3], 'col': o[4]}
-        try:
-            qw = self.filemaps[o['filenum']]
-            ch = qw.findChild(MeltSourceViewer)
-            if ch:
-                ch.mark_location(o)
-        except KeyError as e:
-            print "error:", e
-
-    def slot_ask_infoLocation(self, obj):
-        self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, obj)
 
 class MeltProbeApplication(QApplication):
     TRACE_WINDOW = None
@@ -313,22 +333,21 @@ class MeltProbeApplication(QApplication):
         self.main()
 
     def main(self):
+        dispatcher = MeltCommandDispatcher()
+        comm = MeltCommunication(self.args.command_from_MELT, self.args.request_to_MELT)
         if (self.args.T):
             self.TRACE_WINDOW = MeltTraceWindow()
             self.TRACE_WINDOW.start()
-        self.SOURCE_WINDOW = MeltSourceWindow()
+        self.SOURCE_WINDOW = MeltSourceWindow(dispatcher, comm)
         self.SOURCE_WINDOW.start()
-        dispatcher = MeltCommandDispatcher(self.TRACE_WINDOW, self.SOURCE_WINDOW)
-        comm = MeltCommunication(self.args.command_from_MELT, self.args.request_to_MELT)
+
         QObject.connect(comm, MELT_SIGNAL_DISPATCH_COMMAND, dispatcher.slot_dispatchCommand, Qt.QueuedConnection)
-        QObject.connect(self.SOURCE_WINDOW, MELT_SIGNAL_SOURCE_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
+        QObject.connect(dispatcher, MELT_SIGNAL_ASK_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
 
         if (self.args.T):
             QObject.connect(dispatcher, MELT_SIGNAL_APPEND_TRACE_COMMAND, self.TRACE_WINDOW.slot_appendCommand, Qt.QueuedConnection)
             QObject.connect(comm, MELT_SIGNAL_APPEND_TRACE_REQUEST, self.TRACE_WINDOW.slot_appendRequest, Qt.QueuedConnection)
 
-        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.SOURCE_WINDOW.slot_showfile, Qt.QueuedConnection)
-        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, self.SOURCE_WINDOW.slot_marklocation, Qt.QueuedConnection)
         QObject.connect(dispatcher, MELT_SIGNAL_UNHANDLED_COMMAND, dispatcher.slot_unhandledCommand, Qt.QueuedConnection)
 
         comm.start()
