@@ -126,7 +126,7 @@ class MeltSourceViewer(QsciScintilla):
         self.indicators[str(lineFrom) + ":" + str(indexFrom)] = o
         self.fillIndicatorRange(lineFrom, indexFrom, lineTo, indexTo, self.indicator)
         self.markerAdd(lineFrom, self.ARROW_MARKER_NUM)
-        print self.file['filename'], "::adding marker on line", lineFrom
+        # print self.file['filename'], "::adding marker on line", lineFrom
 
     def on_margin_clicked(self, nmargin, nline, modifiers):
         # Toggle marker for the line the margin was clicked on
@@ -316,7 +316,7 @@ class MeltSourceWindow(QMainWindow, Thread):
             layout.addWidget(txt)
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
-            print "mapping",o['filenum'],"with object:",txt.objectName()
+            # print "mapping",o['filenum'],"with object:",txt.objectName()
         else:
             print "Unable to open '%(file)s'" % {'file': o['filename']}
             return
