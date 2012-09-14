@@ -173,7 +173,10 @@ class MeltCommandDispatcher(QObject):
         cmd = o[0]
         if cmd == "SHOWFILE_PCD":
             fnum = int(o[4])
-            obj = {'command': 'showfile', 'filename': o[2].strip('"'), 'filenum': fnum}
+            p = o[2].strip('"')
+            if p != "<built-in>":
+                p = os.path.abspath(p)
+            obj = {'command': 'showfile', 'filename': p, 'filenum': fnum}
             sig = MELT_SIGNAL_SOURCE_SHOWFILE
             if not self.FILES.has_key(fnum):
                 self.FILES[fnum] = {'file': obj, 'marks': {}}
