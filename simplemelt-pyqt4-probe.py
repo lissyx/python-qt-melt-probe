@@ -31,6 +31,8 @@ MELT_SIGNAL_SOURCE_ADDINFOLOC = SIGNAL("addInfoLocation(PyQt_PyObject)")
 
 MELT_SIGNAL_SHOWFILE_COMPLETE = SIGNAL("showfileComplete(PyQt_PyObject)")
 
+MELT_SIGNAL_INFOLOC_COMPLETE = SIGNAL("infolocComplete(PyQt_PyObject)")
+
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
 class MeltSourceViewer(QsciScintilla):
@@ -168,6 +170,7 @@ class MeltSourceViewer(QsciScintilla):
     def slot_startinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
             print "slot_startinfolocation(", o,")"
+            self.emit(MELT_SIGNAL_INFOLOC_COMPLETE, o['marknum'])
 
     def slot_addinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
@@ -179,6 +182,10 @@ class MeltCommandDispatcher(QObject, Thread):
     QUEUE_MARKLOCATION_MUTEX = QMutex()
     SHOWFILE_READY = {}
     QUEUE_MARKLOCATION = {}
+
+    QUEUE_INFOLOC_MUTEX = QMutex()
+    INFOLOC_READY = {}
+    QUEUE_INFOLOC = {}
 
     def __init__(self):
         QObject.__init__(self)
@@ -240,6 +247,18 @@ class MeltCommandDispatcher(QObject, Thread):
             filenum = self.MARKS[marknum]
             obj = {'command': 'addinfoloc', 'marknum': marknum, 'filenum': filenum, 'payload': " ".join(o[2:]).split('"   "')}
             sig = MELT_SIGNAL_SOURCE_ADDINFOLOC
+            # If INFOLOC interface has not been completed, enqueue, and we will dequeue
+            # when the interface is ready
+            self.QUEUE_INFOLOC_MUTEX.lock()
+            if not self.SHOWFILE_READY.has_key(marknum):
+                try:
+                    self.QUEUE_INFOLOC[marknum] += [ obj ]
+                except KeyError as e:
+                    self.QUEUE_INFOLOC[marknum] = [ obj ]
+                finally:
+                    self.QUEUE_INFOLOC_MUTEX.unlock()
+                return
+            self.QUEUE_INFOLOC_MUTEX.unlock()
 
         print "Dispatcher emit:", sig, obj
 
@@ -256,6 +275,15 @@ class MeltCommandDispatcher(QObject, Thread):
             self.emit(MELT_SIGNAL_SOURCE_MARKLOCATION, obj)
         self.SHOWFILE_READY[filenum] = True
         self.QUEUE_MARKLOCATION_MUTEX.unlock()
+
+    def slot_infolocComplete(self, marknum):
+        self.QUEUE_INFOLOC_MUTEX.lock()
+        queue = self.QUEUE_INFOLOC[marknum]
+        # print "INFOLOC has been completed for", marknum, "QUEUED:", queue
+        for obj in queue:
+            self.emit(MELT_SIGNAL_SOURCE_ADDINFOLOC, obj)
+        self.INFOLOC_READY[marknum] = True
+        self.QUEUE_INFOLOC_MUTEX.unlock()
 
 class MeltCommunication(QObject, Thread):
     def __init__(self, fdin, fdout):
@@ -378,6 +406,7 @@ class MeltSourceWindow(QMainWindow, Thread):
             cnt.setObjectName("count")
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
             QObject.connect(txt, MELT_SIGNAL_SOURCE_INFOLOCATION, self.dispatcher.slot_sendInfoLocation, Qt.QueuedConnection)
+            QObject.connect(txt, MELT_SIGNAL_INFOLOC_COMPLETE, self.dispatcher.slot_infolocComplete, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_STARTINFOLOC, txt.slot_startinfolocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_ADDINFOLOC, txt.slot_addinfolocation, Qt.QueuedConnection)
             layout.addWidget(lbl)
