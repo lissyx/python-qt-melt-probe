@@ -152,12 +152,17 @@ class MeltSourceViewer(QsciScintilla):
         if (self.file['filenum'] == o['filenum']):
             print "slot_addinfolocation(", o,")"
 
-class MeltCommandDispatcher(QObject):
+class MeltCommandDispatcher(QObject, Thread):
     FILES = {}
     MARKS = {}
 
     def __init__(self):
         QObject.__init__(self)
+        Thread.__init__(self)
+        self.start()
+
+    def run(self):
+        print "I'm", self.getName()
 
     def slot_unhandledCommand(self, cmd):
         print "E: Unhandled command:", cmd
@@ -254,6 +259,7 @@ class MeltTraceWindow(QMainWindow, Thread):
         Thread.__init__(self)
         super(MeltTraceWindow, self).__init__()
         self.initUI()
+        self.start()
 
     def initUI(self):
         self.text = QTextEdit()
@@ -284,6 +290,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.initUI()
 
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
+        self.start()
 
     def initUI(self):
         window = QWidget()
@@ -342,9 +349,7 @@ class MeltProbeApplication(QApplication):
         comm = MeltCommunication(self.args.command_from_MELT, self.args.request_to_MELT)
         if (self.args.T):
             self.TRACE_WINDOW = MeltTraceWindow()
-            self.TRACE_WINDOW.start()
         self.SOURCE_WINDOW = MeltSourceWindow(dispatcher, comm)
-        self.SOURCE_WINDOW.start()
 
         QObject.connect(comm, MELT_SIGNAL_DISPATCH_COMMAND, dispatcher.slot_dispatchCommand, Qt.QueuedConnection)
         QObject.connect(dispatcher, MELT_SIGNAL_ASK_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
