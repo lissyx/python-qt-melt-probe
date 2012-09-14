@@ -298,7 +298,7 @@ class MeltSourceWindow(QMainWindow, Thread):
     def slot_ask_infoLocation(self, obj):
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, obj)
 
-def slot_unhandledCommand(self, cmd):
+def slot_unhandledCommand(cmd):
     print "E: Unhandled command:", cmd
 
 class MeltProbeApplication(QApplication):
