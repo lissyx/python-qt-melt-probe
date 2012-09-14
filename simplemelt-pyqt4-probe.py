@@ -299,29 +299,31 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, obj)
 
 class MeltProbeApplication(QApplication):
+    TRACE_WINDOW = None
+    SOURCE_WINDOW = None
+
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.parse_args()
         self.main()
 
     def main(self):
-        trace = None
         if (self.args.T):
-            trace = MeltTraceWindow()
-            trace.start()
-        source = MeltSourceWindow()
-        source.start()
-        dispatcher = MeltCommandDispatcher(trace, source)
+            self.TRACE_WINDOW = MeltTraceWindow()
+            self.TRACE_WINDOW.start()
+        self.SOURCE_WINDOW = MeltSourceWindow()
+        self.SOURCE_WINDOW.start()
+        dispatcher = MeltCommandDispatcher(self.TRACE_WINDOW, self.SOURCE_WINDOW)
         comm = MeltCommunication(self.args.command_from_MELT, self.args.request_to_MELT)
         QObject.connect(comm, MELT_SIGNAL_DISPATCH_COMMAND, dispatcher.slot_dispatchCommand, Qt.QueuedConnection)
-        QObject.connect(source, MELT_SIGNAL_SOURCE_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
+        QObject.connect(self.SOURCE_WINDOW, MELT_SIGNAL_SOURCE_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
 
         if (self.args.T):
-            QObject.connect(dispatcher, MELT_SIGNAL_APPEND_TRACE_COMMAND, trace.slot_appendCommand, Qt.QueuedConnection)
-            QObject.connect(comm, MELT_SIGNAL_APPEND_TRACE_REQUEST, trace.slot_appendRequest, Qt.QueuedConnection)
+            QObject.connect(dispatcher, MELT_SIGNAL_APPEND_TRACE_COMMAND, self.TRACE_WINDOW.slot_appendCommand, Qt.QueuedConnection)
+            QObject.connect(comm, MELT_SIGNAL_APPEND_TRACE_REQUEST, self.TRACE_WINDOW.slot_appendRequest, Qt.QueuedConnection)
 
-        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, source.slot_showfile, Qt.QueuedConnection)
-        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, source.slot_marklocation, Qt.QueuedConnection)
+        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.SOURCE_WINDOW.slot_showfile, Qt.QueuedConnection)
+        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, self.SOURCE_WINDOW.slot_marklocation, Qt.QueuedConnection)
         QObject.connect(dispatcher, MELT_SIGNAL_UNHANDLED_COMMAND, self.slot_unhandledCommand, Qt.QueuedConnection)
 
         comm.start()
