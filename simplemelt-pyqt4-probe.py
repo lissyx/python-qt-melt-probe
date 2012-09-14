@@ -31,6 +31,8 @@ MELT_SIGNAL_SOURCE_ADDINFOLOC = SIGNAL("addInfoLocation(PyQt_PyObject)")
 
 MELT_SIGNAL_SHOWFILE_COMPLETE = SIGNAL("showfileComplete(PyQt_PyObject)")
 
+MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
+
 class MeltSourceViewer(QsciScintilla):
     ARROW_MARKER_NUM = 8
     indicators = {}
@@ -308,6 +310,9 @@ class MeltTraceWindow(QMainWindow, Thread):
         self.text.append(str)
 
 class MeltSourceWindow(QMainWindow, Thread):
+    LBL_COUNT = "Count: %(cnt)d"
+    COUNTS = {}
+
     def __init__(self, dispatcher, comm):
         Thread.__init__(self)
         super(MeltSourceWindow, self).__init__()
@@ -317,6 +322,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.initUI()
 
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
+        QObject.connect(self, MELT_SIGNAL_UPDATECOUNT, self.slot_updateCount, Qt.QueuedConnection)
         self.start()
 
     def initUI(self):
@@ -339,6 +345,9 @@ class MeltSourceWindow(QMainWindow, Thread):
         (dir, fname) = os.path.split(path)
         return fname
 
+    def get_count(self, filenum):
+        return self.LBL_COUNT % {'cnt': self.COUNTS[filenum]}
+
     def slot_showfile(self, o):
         qw = QWidget()
         layout = QVBoxLayout()
@@ -347,12 +356,17 @@ class MeltSourceWindow(QMainWindow, Thread):
         if os.path.exists(o['filename']) or o['filename'] == "<built-in>":
             txt = MeltSourceViewer(qw, o)
             lbl = QLabel(o['filename'])
+            lbl.setObjectName("filename")
+            self.COUNTS[o['filenum']] = 0
+            cnt = QLabel(self.get_count(o['filenum']))
+            cnt.setObjectName("count")
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
             QObject.connect(txt, MELT_SIGNAL_SOURCE_INFOLOCATION, self.dispatcher.slot_sendInfoLocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_STARTINFOLOC, txt.slot_startinfolocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_ADDINFOLOC, txt.slot_addinfolocation, Qt.QueuedConnection)
             layout.addWidget(lbl)
             layout.addWidget(txt)
+            layout.addWidget(cnt)
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
             # print "mapping",o['filenum'],"with object:",txt.objectName()
@@ -362,6 +376,15 @@ class MeltSourceWindow(QMainWindow, Thread):
             return
             err = QErrorMessage("Unable to open '%(file)s'" % {'file': o['filename']})
             err.showMessage()
+
+    def slot_marklocation(self, obj):
+        self.COUNTS[obj['filenum']] += 1
+        self.emit(MELT_SIGNAL_UPDATECOUNT, obj['filenum'])
+
+    def slot_updateCount(self, fnum):
+        cnt = self.filemaps[fnum].findChild(QLabel, "count")
+        if cnt:
+            cnt.setText(self.get_count(fnum))
 
 class MeltProbeApplication(QApplication):
     TRACE_WINDOW = None
@@ -381,6 +404,7 @@ class MeltProbeApplication(QApplication):
 
         QObject.connect(comm, MELT_SIGNAL_DISPATCH_COMMAND, dispatcher.slot_dispatchCommand, Qt.QueuedConnection)
         QObject.connect(dispatcher, MELT_SIGNAL_ASK_INFOLOCATION, comm.slot_sendInfoLocation, Qt.QueuedConnection)
+        QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, self.SOURCE_WINDOW.slot_marklocation, Qt.QueuedConnection)
         QObject.connect(self.SOURCE_WINDOW, MELT_SIGNAL_SHOWFILE_COMPLETE, dispatcher.slot_showfileComplete, Qt.QueuedConnection)
 
         if (self.args.T):
