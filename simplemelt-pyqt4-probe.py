@@ -34,7 +34,8 @@ MELT_SIGNAL_SHOWFILE_COMPLETE = SIGNAL("showfileComplete(PyQt_PyObject)")
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
 class MeltSourceViewer(QsciScintilla):
-    ARROW_MARKER_NUM = 8
+    ARROW_MARKER_PENDING = 8
+    ARROW_MARKER_SELECTED = 9
 
     def __init__(self, parent, obj):
         QsciScintilla.__init__(self, parent)
@@ -43,7 +44,8 @@ class MeltSourceViewer(QsciScintilla):
         self.file = obj
         self.setReadOnly(True)
         self.setObjectName("MeltSourceViewer:" + self.file['filename'])
-        self.indicator = self.indicatorDefine(QsciScintilla.BoxIndicator)
+        self.indicatorPending = self.indicatorDefine(QsciScintilla.BoxIndicator)
+        self.indicatorSelected = self.indicatorDefine(QsciScintilla.DotBoxIndicator)
 
         # Set the default font
         font = QFont()
@@ -66,9 +68,13 @@ class MeltSourceViewer(QsciScintilla):
         #    SIGNAL('marginClicked(int, int, Qt::KeyboardModifiers)'),
         #    self.on_margin_clicked)
         self.markerDefine(QsciScintilla.RightArrow,
-            self.ARROW_MARKER_NUM)
+            self.ARROW_MARKER_PENDING)
         self.setMarkerBackgroundColor(QColor("#ee1111"),
-            self.ARROW_MARKER_NUM)
+            self.ARROW_MARKER_PENDING)
+        self.markerDefine(QsciScintilla.RightArrow,
+            self.ARROW_MARKER_SELECTED)
+        self.setMarkerBackgroundColor(QColor("#11ee11"),
+            self.ARROW_MARKER_SELECTED)
 
         self.connect(self,
             SIGNAL('indicatorClicked(int, int, Qt::KeyboardModifiers)'),
@@ -122,15 +128,24 @@ class MeltSourceViewer(QsciScintilla):
             content = f.readlines()
         return "".join(content)
 
+    def switch_marklocation_pending(self, line, index):
+        self.clearIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
+        self.fillIndicatorRange(line, index, line, index + 1, self.indicatorPending)
+        self.markerDelete(line, self.ARROW_MARKER_SELECTED)
+        self.markerAdd(line, self.ARROW_MARKER_PENDING)
+
+    def switch_marklocation_selected(self, line, index):
+        self.clearIndicatorRange(line, index, line, index + 1, self.indicatorPending)
+        self.fillIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
+        self.markerDelete(line, self.ARROW_MARKER_PENDING)
+        self.markerAdd(line, self.ARROW_MARKER_SELECTED)
+
     def mark_location(self, o):
-        lineFrom = o['line']
-        indexFrom = o['col']
-        lineTo = o['line']
-        indexTo = o['col'] + 1
-        self.indicators[str(lineFrom) + ":" + str(indexFrom)] = o
-        self.fillIndicatorRange(lineFrom, indexFrom, lineTo, indexTo, self.indicator)
-        self.markerAdd(lineFrom, self.ARROW_MARKER_NUM)
-        # print self.file['filename'], "::adding marker on line", lineFrom
+        line = o['line']
+        index = o['col']
+        self.indicators[str(line) + ":" + str(index)] = o
+        self.switch_marklocation_pending(line, index)
+        # print self.file['filename'], "::adding marker on line", line
 
     def on_margin_clicked(self, nmargin, nline, modifiers):
         # Toggle marker for the line the margin was clicked on
@@ -142,6 +157,7 @@ class MeltSourceViewer(QsciScintilla):
     def on_indicator_clicked(self, line, index, state):
         # print "on_indicator_clicked(", self, ", ", line, ", ", index, ", ", state, ")"
         indic = self.indicators[str(line) + ":" + str(index)]
+        self.switch_marklocation_selected(line, index)
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, indic)
 
     def slot_marklocation(self, o):
