@@ -144,6 +144,8 @@ class MeltCommandDispatcher(QObject):
             sig = MELT_SIGNAL_SOURCE_MARKLOCATION
             if not self.MARKS.has_key(marknum):
                 self.MARKS[marknum] = obj
+        elif cmd == "STARTINFOLOC_PCD":
+            obj = {'command': 'startinfoloc', 'marknum': int(o[1])}
         elif cmd == "ADDINFOLOC_PCD":
             obj = {'command': 'addinfoloc', 'marknum': int(o[1]),  'payload': " ".join(o[2:]).split('"   "')}
 
