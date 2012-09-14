@@ -309,10 +309,12 @@ class MeltSourceWindow(QMainWindow, Thread):
 
         if os.path.exists(o['filename']) or o['filename'] == "<built-in>":
             txt = MeltSourceViewer(qw, o)
+            lbl = QLabel(o['filename'])
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
             QObject.connect(txt, MELT_SIGNAL_SOURCE_INFOLOCATION, self.dispatcher.slot_sendInfoLocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_STARTINFOLOC, txt.slot_startinfolocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_ADDINFOLOC, txt.slot_addinfolocation, Qt.QueuedConnection)
+            layout.addWidget(lbl)
             layout.addWidget(txt)
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
