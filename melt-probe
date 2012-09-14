@@ -1,0 +1,5 @@
+#!/bin/bash -x
+# the -T argument to the probe display the trace window
+# showing the exchanges between probe and MELT
+DIR=$(dirname $0)
+exec /usr/bin/python ${DIR}/simplemelt-pyqt4-probe.py -T $*
