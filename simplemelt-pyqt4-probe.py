@@ -298,6 +298,9 @@ class MeltSourceWindow(QMainWindow, Thread):
     def slot_ask_infoLocation(self, obj):
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, obj)
 
+def slot_unhandledCommand(self, cmd):
+    print "E: Unhandled command:", cmd
+
 class MeltProbeApplication(QApplication):
     TRACE_WINDOW = None
     SOURCE_WINDOW = None
@@ -324,13 +327,10 @@ class MeltProbeApplication(QApplication):
 
         QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.SOURCE_WINDOW.slot_showfile, Qt.QueuedConnection)
         QObject.connect(dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, self.SOURCE_WINDOW.slot_marklocation, Qt.QueuedConnection)
-        QObject.connect(dispatcher, MELT_SIGNAL_UNHANDLED_COMMAND, self.slot_unhandledCommand, Qt.QueuedConnection)
+        QObject.connect(dispatcher, MELT_SIGNAL_UNHANDLED_COMMAND, slot_unhandledCommand, Qt.QueuedConnection)
 
         comm.start()
         sys.exit(self.app.exec_())
-
-    def slot_unhandledCommand(self, cmd):
-        print "E: Unhandled command:", cmd
 
     def parse_args(self):
         self.parser = argparse.ArgumentParser(description="MELT probe")
