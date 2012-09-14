@@ -114,6 +114,9 @@ class MeltSourceViewer(QsciScintilla):
         self.emit(MELT_SIGNAL_ASK_INFOLOCATION, indic)
 
 class MeltCommandDispatcher(QObject):
+    FILES = {}
+    MARKS = {}
+
     def __init__(self, trace, source):
         QObject.__init__(self)
         self.trace  = trace
@@ -129,16 +132,22 @@ class MeltCommandDispatcher(QObject):
         obj = o
         cmd = o[0]
         if cmd == "SHOWFILE_PCD":
-            obj = {'command': 'showfile', 'filename': o[2], 'filenum': int(o[4])}
+            fnum = int(o[4])
+            obj = {'command': 'showfile', 'filename': o[2], 'filenum': fnum}
             sig = MELT_SIGNAL_SOURCE_SHOWFILE
+            if not self.FILES.has_key(fnum):
+                self.FILES[fnum] = obj
         elif cmd == "MARKLOCATION_PCD":
             # -1 pour corriger l'affichage
-            obj = {'command': 'marklocation', 'marknum': int(o[1]), 'filenum': int(o[2]), 'line': max(int(o[3]) - 1, 0), 'col': max(int(o[4]) - 1, 0)}
+            marknum = int(o[1])
+            obj = {'command': 'marklocation', 'marknum': marknum, 'filenum': int(o[2]), 'line': max(int(o[3]) - 1, 0), 'col': max(int(o[4]) - 1, 0)}
             sig = MELT_SIGNAL_SOURCE_MARKLOCATION
+            if not self.MARKS.has_key(marknum):
+                self.MARKS[marknum] = obj
         elif cmd == "ADDINFOLOC_PCD":
             obj = {'command': 'addinfoloc', 'marknum': int(o[1]),  'payload': " ".join(o[2:]).split('"   "')}
 
-        print "Dispatcher emit:", obj
+        print "Dispatcher emit:", sig, obj
 
         self.emit(sig, obj)
 
