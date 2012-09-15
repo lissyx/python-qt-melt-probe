@@ -225,6 +225,7 @@ class MeltCommandDispatcher(QObject, Thread):
             if not self.MARKS.has_key(marknum):
                 self.MARKS[marknum] = filenum
                 self.FILES[filenum]['marks'][marknum] = obj
+                self.QUEUE_INFOLOC[marknum] = []
             # If SHOWFILE interface has not been completed, enqueue, and we will dequeue
             # when the interface is ready
             self.QUEUE_MARKLOCATION_MUTEX.lock()
@@ -251,12 +252,8 @@ class MeltCommandDispatcher(QObject, Thread):
             # when the interface is ready
             self.QUEUE_INFOLOC_MUTEX.lock()
             if not self.INFOLOC_READY.has_key(marknum):
-                try:
-                    self.QUEUE_INFOLOC[marknum] += [ obj ]
-                except KeyError as e:
-                    self.QUEUE_INFOLOC[marknum] = [ obj ]
-                finally:
-                    self.QUEUE_INFOLOC_MUTEX.unlock()
+                self.QUEUE_INFOLOC[marknum] += [ obj ]
+                self.QUEUE_INFOLOC_MUTEX.unlock()
                 return
             self.QUEUE_INFOLOC_MUTEX.unlock()
 
