@@ -43,6 +43,7 @@ class MeltInfoLoc(QMainWindow):
 
     def __init__(self):
         QMainWindow.__init__(self)
+        self.handled_marknums = {}
         self.initUI()
 
     def initUI(self):
@@ -72,6 +73,12 @@ class MeltInfoLoc(QMainWindow):
         getident = self.INFOLOC_IDENT_RE.search(ident)
         if getident:
             id = getident.group(1)
+            marknum_key = str(obj['marknum']) + ":" + str(id)
+            print "Checking for previously handled", marknum_key, "..."
+            if self.handled_marknums.has_key(marknum_key):
+                print "Already handled", marknum_key, "not duplicating."
+                return
+
             block = getident.group(2)
             cols = QStringList()
             cols.append(id)
@@ -85,6 +92,7 @@ class MeltInfoLoc(QMainWindow):
                 child = QTreeWidgetItem(item, chcols, QTreeWidgetItem.UserType)
                 item.addChild(child)
             self.tree.addTopLevelItem(item)
+            self.handled_marknums[marknum_key] = True
 
     def closeEvent(self, ev):
         self.emit(MELT_SIGNAL_INFOLOC_QUIT)
@@ -273,12 +281,17 @@ class MeltSourceViewer(QsciScintilla):
     def slot_startinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
             # print "slot_startinfolocation(", o,")"
-            mil = MeltInfoLoc()
-            QObject.connect(mil, MELT_SIGNAL_INFOLOC_QUIT, self.slot_infolocation_quit, Qt.QueuedConnection)
-            self.infolocs[o['marknum']] = mil
-            self.mil_to_marknum[mil] = o['marknum']
-            self.switch_marklocation_selected(o['marknum'])
-            self.emit(MELT_SIGNAL_INFOLOC_COMPLETE, o['marknum'])
+            try:
+                w = self.infolocs[o['marknum']]
+                w.raise_()
+                w.setFocus(True)
+            except KeyError as e:
+                mil = MeltInfoLoc()
+                QObject.connect(mil, MELT_SIGNAL_INFOLOC_QUIT, self.slot_infolocation_quit, Qt.QueuedConnection)
+                self.infolocs[o['marknum']] = mil
+                self.mil_to_marknum[mil] = o['marknum']
+                self.switch_marklocation_selected(o['marknum'])
+                self.emit(MELT_SIGNAL_INFOLOC_COMPLETE, o['marknum'])
 
     def slot_addinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
@@ -290,6 +303,7 @@ class MeltSourceViewer(QsciScintilla):
     def slot_infolocation_quit(self):
         marknum = self.mil_to_marknum[self.sender()]
         if marknum:
+            self.infolocs.pop(marknum)
             self.switch_marklocation_pending(marknum)
 
 class MeltCommandDispatcher(QObject, Thread):
