@@ -250,7 +250,7 @@ class MeltCommandDispatcher(QObject, Thread):
             # If INFOLOC interface has not been completed, enqueue, and we will dequeue
             # when the interface is ready
             self.QUEUE_INFOLOC_MUTEX.lock()
-            if not self.SHOWFILE_READY.has_key(marknum):
+            if not self.INFOLOC_READY.has_key(marknum):
                 try:
                     self.QUEUE_INFOLOC[marknum] += [ obj ]
                 except KeyError as e:
