@@ -11,6 +11,7 @@ import os
 import argparse
 import select
 import pprint
+import re
 from datetime import datetime
 from threading import Thread
 from PyQt4.QtGui import *
@@ -35,6 +36,54 @@ MELT_SIGNAL_INFOLOC_COMPLETE = SIGNAL("infolocComplete(PyQt_PyObject)")
 
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
+class MeltInfoLoc(QMainWindow):
+    INFOLOC_IDENT_RE = re.compile(r"(\d+):(.*)")
+
+    def __init__(self):
+        QMainWindow.__init__(self)
+        self.initUI()
+
+    def initUI(self):
+        window = QWidget()
+        self.vlayout = QVBoxLayout()
+        self.tree = QTreeWidget()
+        # {'marknum': 543, 'command': 'addinfoloc', 'filenum': 1, 'payload': [' "1:Basic Block #10 Gimple Seq', '[drivers/media/rc/imon.c : 1247:10] rel_x.11 = (signed char) rel_x;\\n[drivers/media/rc/imon.c : 1247:10] D.21223 = rel_x.11 | -16;\\n[drivers/media/rc/imon.c : 1247:10] rel_x = (char) D.21223;\\n"  ']}
+        # columns:
+        #  - "1" -> infolocid
+        #  - "Basic Block #10 Gimple Seq" -> bb
+        #  - ... -> content
+        self.tree.setColumnCount(3)
+        self.tree.setHeaderLabels(["ID", "Block", "Content"])
+        self.vlayout.addWidget(self.tree)
+        window.setLayout(self.vlayout)
+        window.show()
+        self.setCentralWidget(window)
+        self.setGeometry(0, 0, 320, 240)
+        self.setWindowTitle("MELT InfoLoc Window")
+        self.show()
+
+    def push_infolocation(self, obj):
+        print "push_infolocation(", obj,")"
+        ident = obj['payload'][0].replace('"', '')
+        payload = obj['payload'][1].replace('"', '').split("\\n")
+
+        getident = self.INFOLOC_IDENT_RE.search(ident)
+        if getident:
+            id = getident.group(1)
+            block = getident.group(2)
+            cols = QStringList()
+            cols.append(id)
+            cols.append(block)
+            item = QTreeWidgetItem(cols, QTreeWidgetItem.UserType)
+            for line in payload:
+                chcols = QStringList()
+                chcols.append("")
+                chcols.append("")
+                chcols.append(line)
+                child = QTreeWidgetItem(item, chcols, QTreeWidgetItem.UserType)
+                item.addChild(child)
+            self.tree.addTopLevelItem(item)
+
 class MeltSourceViewer(QsciScintilla):
     ARROW_MARKER_PENDING = 8
     ARROW_MARKER_SELECTED = 9
@@ -42,6 +91,7 @@ class MeltSourceViewer(QsciScintilla):
     def __init__(self, parent, obj):
         QsciScintilla.__init__(self, parent)
 
+        self.infolocs = {}
         self.indicators = {}
         self.file = obj
         self.setReadOnly(True)
@@ -169,12 +219,16 @@ class MeltSourceViewer(QsciScintilla):
 
     def slot_startinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
-            print "slot_startinfolocation(", o,")"
+            # print "slot_startinfolocation(", o,")"
+            self.infolocs[o['marknum']] = MeltInfoLoc()
             self.emit(MELT_SIGNAL_INFOLOC_COMPLETE, o['marknum'])
 
     def slot_addinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
-            print "slot_addinfolocation(", o,")"
+            # print "slot_addinfolocation(", o,")"
+            w = self.infolocs[o['marknum']]
+            if w is not None:
+                w.push_infolocation(o)
 
 class MeltCommandDispatcher(QObject, Thread):
     FILES = {}
