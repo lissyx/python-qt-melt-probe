@@ -34,6 +34,8 @@ MELT_SIGNAL_SHOWFILE_COMPLETE = SIGNAL("showfileComplete(PyQt_PyObject)")
 
 MELT_SIGNAL_INFOLOC_COMPLETE = SIGNAL("infolocComplete(PyQt_PyObject)")
 
+MELT_SIGNAL_INFOLOC_QUIT = SIGNAL("quitInfoloc()")
+
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
 class MeltInfoLoc(QMainWindow):
@@ -84,6 +86,9 @@ class MeltInfoLoc(QMainWindow):
                 item.addChild(child)
             self.tree.addTopLevelItem(item)
 
+    def closeEvent(self, ev):
+        self.emit(MELT_SIGNAL_INFOLOC_QUIT)
+
 class MeltSourceViewer(QsciScintilla):
     ARROW_MARKER_PENDING = 8
     ARROW_MARKER_SELECTED = 9
@@ -92,7 +97,10 @@ class MeltSourceViewer(QsciScintilla):
         QsciScintilla.__init__(self, parent)
 
         self.infolocs = {}
+        self.mil_to_marknum = {}
         self.indicators = {}
+        self.marklocations = {}
+        self.markers_counter = {}
         self.file = obj
         self.setReadOnly(True)
         self.setObjectName("MeltSourceViewer:" + self.file['filename'])
@@ -180,23 +188,69 @@ class MeltSourceViewer(QsciScintilla):
             content = f.readlines()
         return "".join(content)
 
-    def switch_marklocation_pending(self, line, index):
-        self.clearIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
-        self.fillIndicatorRange(line, index, line, index + 1, self.indicatorPending)
-        self.markerDelete(line, self.ARROW_MARKER_SELECTED)
-        self.markerAdd(line, self.ARROW_MARKER_PENDING)
+    def marknum_to_lineindex(self, marknum):
+        if not self.marklocations.has_key(marknum):
+            return None
+        else:
+            return self.marklocations[marknum]
 
-    def switch_marklocation_selected(self, line, index):
-        self.clearIndicatorRange(line, index, line, index + 1, self.indicatorPending)
-        self.fillIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
-        self.markerDelete(line, self.ARROW_MARKER_PENDING)
-        self.markerAdd(line, self.ARROW_MARKER_SELECTED)
+    def lineindex_to_marknum(self, line, index):
+        key = str(line) + ":" + str(index)
+        if not self.indicators.has_key(key):
+            return None
+        else:
+            return self.marklocations[self.indicators[key]['marknum']]
+
+    def set_marker(self, line, stateFrom, stateTo):
+        self.markerDelete(line, stateFrom)
+        self.markerAdd(line, stateTo)
+
+    def set_marker_pending(self, line, init):
+        print "entering set_marker_pending, counter:", self.markers_counter[line]
+
+        change = init
+        if not init:
+            self.markers_counter[line] -= 1
+            if self.markers_counter[line] <= 0:
+                change = True
+
+        if change:
+            self.set_marker(line, self.ARROW_MARKER_SELECTED, self.ARROW_MARKER_PENDING)
+
+        print "leaving set_marker_pending, counter:", self.markers_counter[line]
+
+    def set_marker_selected(self, line):
+        print "entering set_marker_selected, counter:", self.markers_counter[line]
+        self.markers_counter[line] += 1
+        self.set_marker(line, self.ARROW_MARKER_PENDING, self.ARROW_MARKER_SELECTED)
+        print "leaving set_marker_selected, counter:", self.markers_counter[line]
+
+    def switch_marklocation_pending(self, marknum, init = False):
+        pos = self.marknum_to_lineindex(marknum)
+        if pos is not None:
+            line = pos['line']
+            index = pos['index']
+            self.clearIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
+            self.fillIndicatorRange(line, index, line, index + 1, self.indicatorPending)
+            self.set_marker_pending(line, init)
+
+    def switch_marklocation_selected(self, marknum):
+        pos = self.marknum_to_lineindex(marknum)
+        if pos is not None:
+            line = pos['line']
+            index = pos['index']
+            self.clearIndicatorRange(line, index, line, index + 1, self.indicatorPending)
+            self.fillIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
+            self.set_marker_selected(line)
 
     def mark_location(self, o):
         line = o['line']
         index = o['col']
+        if not self.markers_counter.has_key(line):
+            self.markers_counter[line] = 0
+        self.marklocations[o['marknum']] = {'line': line, 'index': index}
         self.indicators[str(line) + ":" + str(index)] = o
-        self.switch_marklocation_pending(line, index)
+        self.switch_marklocation_pending(o['marknum'], True)
         # print self.file['filename'], "::adding marker on line", line
 
     def on_margin_clicked(self, nmargin, nline, modifiers):
@@ -209,7 +263,6 @@ class MeltSourceViewer(QsciScintilla):
     def on_indicator_clicked(self, line, index, state):
         # print "on_indicator_clicked(", self, ", ", line, ", ", index, ", ", state, ")"
         indic = self.indicators[str(line) + ":" + str(index)]
-        self.switch_marklocation_selected(line, index)
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, indic)
 
     def slot_marklocation(self, o):
@@ -220,7 +273,11 @@ class MeltSourceViewer(QsciScintilla):
     def slot_startinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
             # print "slot_startinfolocation(", o,")"
-            self.infolocs[o['marknum']] = MeltInfoLoc()
+            mil = MeltInfoLoc()
+            QObject.connect(mil, MELT_SIGNAL_INFOLOC_QUIT, self.slot_infolocation_quit, Qt.QueuedConnection)
+            self.infolocs[o['marknum']] = mil
+            self.mil_to_marknum[mil] = o['marknum']
+            self.switch_marklocation_selected(o['marknum'])
             self.emit(MELT_SIGNAL_INFOLOC_COMPLETE, o['marknum'])
 
     def slot_addinfolocation(self, o):
@@ -229,6 +286,11 @@ class MeltSourceViewer(QsciScintilla):
             w = self.infolocs[o['marknum']]
             if w is not None:
                 w.push_infolocation(o)
+
+    def slot_infolocation_quit(self):
+        marknum = self.mil_to_marknum[self.sender()]
+        if marknum:
+            self.switch_marklocation_pending(marknum)
 
 class MeltCommandDispatcher(QObject, Thread):
     FILES = {}
