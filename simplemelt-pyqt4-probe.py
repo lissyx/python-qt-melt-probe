@@ -320,6 +320,7 @@ class MeltCommandDispatcher(QObject, Thread):
     def __init__(self):
         QObject.__init__(self)
         Thread.__init__(self)
+        self.daemon = True
         self.start()
 
     def run(self):
@@ -423,6 +424,7 @@ class MeltCommunication(QObject, Thread):
         self.epoll.register(self.melt_stdout, select.EPOLLIN)
 
         self.buf = ""
+        self.daemon = True
 
     def run(self):
         print "I'm", self.getName()
@@ -459,6 +461,7 @@ class MeltTraceWindow(QMainWindow, Thread):
         Thread.__init__(self)
         super(MeltTraceWindow, self).__init__()
         self.initUI()
+        self.daemon = True
         self.start()
 
     def initUI(self):
@@ -494,6 +497,7 @@ class MeltSourceWindow(QMainWindow, Thread):
 
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
         QObject.connect(self, MELT_SIGNAL_UPDATECOUNT, self.slot_updateCount, Qt.QueuedConnection)
+        self.daemon = True
         self.start()
 
     def initUI(self):
