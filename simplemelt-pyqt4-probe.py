@@ -528,6 +528,10 @@ class MeltSourceWindow(QMainWindow, Thread):
         layout = QVBoxLayout()
         qw.setLayout(layout)
 
+        if o['filename'] == "/dev/null":
+            sys.stderr.write('Cannot open /dev/null, exiting.')
+            sys.exit(0)
+
         if os.path.exists(o['filename']) or o['filename'] == "<built-in>":
             txt = MeltSourceViewer(qw, o)
             lbl = QLabel(o['filename'])
