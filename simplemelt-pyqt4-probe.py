@@ -188,7 +188,7 @@ class MeltSourceViewer(QsciScintilla):
         return lexer
 
     def read_file(self, filename):
-        if filename == "<built-in>":
+        if (filename.startswith("<") and filename.endswith(">")):
             return "Pseudo file, built-in."
 
         content = ""
@@ -341,7 +341,7 @@ class MeltCommandDispatcher(QObject, Thread):
         if cmd == "SHOWFILE_PCD":
             fnum = int(o[4])
             p = o[2].strip('"')
-            if p != "<built-in>":
+            if not (p.startswith("<") and p.endswith(">")):
                 p = os.path.abspath(p)
             obj = {'command': 'showfile', 'filename': p, 'filenum': fnum}
             sig = MELT_SIGNAL_SOURCE_SHOWFILE
@@ -533,7 +533,7 @@ class MeltSourceWindow(QMainWindow, Thread):
             sys.stderr.write('Cannot open /dev/null, exiting.')
             sys.exit(0)
 
-        if os.path.exists(o['filename']) or o['filename'] == "<built-in>":
+        if os.path.exists(o['filename']) or (o['filename'].startswith("<") and o['filename'].endswith(">")):
             txt = MeltSourceViewer(qw, o)
             lbl = QLabel(o['filename'])
             lbl.setObjectName("filename")
