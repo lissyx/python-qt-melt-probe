@@ -62,7 +62,7 @@ class MeltInfoLoc(QMainWindow):
         window.show()
         self.setCentralWidget(window)
         self.setGeometry(0, 0, 320, 240)
-        self.setWindowTitle("MELT InfoLoc Window")
+        self.setWindowTitle("MELT InfoLoc Window - PID:PPID=%(pid)d:%(ppid)d @%(host)s" % {'pid': os.getpid(), 'ppid': os.getppid(), 'host': os.uname()[1]})
         self.show()
 
     def push_infolocation(self, obj):
@@ -468,7 +468,7 @@ class MeltTraceWindow(QMainWindow, Thread):
         self.text = QTextEdit()
         self.setCentralWidget(self.text)
         self.setGeometry(0, 0, 640, 480)
-        self.setWindowTitle("MELT Trace Window")
+        self.setWindowTitle("MELT Trace Window - PID:PPID=%(pid)d:%(ppid)d @%(host)s" % {'pid': os.getpid(), 'ppid': os.getppid(), 'host': os.uname()[1]})
         self.show()
 
     def run(self):
@@ -509,7 +509,8 @@ class MeltSourceWindow(QMainWindow, Thread):
         window.show()
         self.setCentralWidget(window)
         self.setGeometry(0, 0, 640, 480)
-        self.setWindowTitle("MELT Source Window")
+        self.setWindowTitle("MELT Source Window - PID:PPID=%(pid)d:%(ppid)d @%(host)s" % {'pid': os.getpid(), 'ppid': os.getppid(), 'host': os.uname()[1]})
+
         self.show()
 
     def run(self):
