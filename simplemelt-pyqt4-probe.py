@@ -540,6 +540,13 @@ class MeltSourceWindow(QMainWindow, Thread):
             self.COUNTS[o['filenum']] = 0
             cnt = QLabel(self.get_count(o['filenum']))
             cnt.setObjectName("count")
+            searchBar = QToolBar()
+            searchBar.setObjectName("search")
+            searchText = QLineEdit()
+            searchBar.addWidget(searchText)
+            searchBar.addSeparator()
+            searchReset = searchBar.addAction("Reset", self.slot_searchReset)
+            searchNext = searchBar.addAction("Next", self.slot_searchNext)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
             QObject.connect(txt, MELT_SIGNAL_SOURCE_INFOLOCATION, self.dispatcher.slot_sendInfoLocation, Qt.QueuedConnection)
             QObject.connect(txt, MELT_SIGNAL_INFOLOC_COMPLETE, self.dispatcher.slot_infolocComplete, Qt.QueuedConnection)
@@ -548,6 +555,8 @@ class MeltSourceWindow(QMainWindow, Thread):
             layout.addWidget(lbl)
             layout.addWidget(txt)
             layout.addWidget(cnt)
+            layout.addWidget(searchBar)
+            searchBar.hide()
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
             # print "mapping",o['filenum'],"with object:",txt.objectName()
@@ -566,6 +575,36 @@ class MeltSourceWindow(QMainWindow, Thread):
         cnt = self.filemaps[fnum].findChild(QLabel, "count")
         if cnt:
             cnt.setText(self.get_count(fnum))
+
+    def keyReleaseEvent(self, ev):
+        if (ev.modifiers() == Qt.ControlModifier and ev.key() == Qt.Key_F):
+            ev.accept()
+            searchBar = self.tabs.currentWidget().findChild(QToolBar, "search")
+            if searchBar.isHidden():
+                searchBar.show()
+                self.tabs.currentWidget().findChild(QLineEdit).setFocus()
+            else:
+                searchBar.hide()
+        else:
+            self.start_search()
+
+    def slot_searchNext(self):
+        searchText = self.tabs.currentWidget().findChild(MeltSourceViewer)
+        if searchText:
+            searchText.findNext()
+
+    def slot_searchReset(self):
+        searchText = self.tabs.currentWidget().findChild(MeltSourceViewer)
+        if searchText:
+            self.start_search()
+
+    def start_search(self):
+        searchText = self.tabs.currentWidget().findChild(MeltSourceViewer)
+        txt = self.tabs.currentWidget().findChild(QLineEdit)
+        findText = txt.text()
+        if searchText and findText.length() > 1:
+            searchText.setCursorPosition(0, 0)
+            searchText.findFirst(findText, False, False, False, False)
 
 class MeltProbeApplication(QApplication):
     TRACE_WINDOW = None
