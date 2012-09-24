@@ -217,7 +217,8 @@ class MeltSourceViewer(QsciScintilla):
 
     def lineindex_to_marknum(self, line, index):
         key = str(line) + ":" + str(index)
-        if not self.indicators.has_key(key):
+        key2 = str(line) + ":" + str(index + 1)
+        if not self.indicators.has_key(key) and not self.indicators.has_key(key2):
             return None
         else:
             return self.marklocations[self.indicators[key]['marknum']]
@@ -251,8 +252,8 @@ class MeltSourceViewer(QsciScintilla):
         if pos is not None:
             line = pos['line']
             index = pos['index']
-            self.clearIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
-            self.fillIndicatorRange(line, index, line, index + 1, self.indicatorPending)
+            self.clearIndicatorRange(line, index, line, index + 2, self.indicatorSelected)
+            self.fillIndicatorRange(line, index, line, index + 2, self.indicatorPending)
             self.set_marker_pending(line, init)
 
     def switch_marklocation_selected(self, marknum):
@@ -260,8 +261,8 @@ class MeltSourceViewer(QsciScintilla):
         if pos is not None:
             line = pos['line']
             index = pos['index']
-            self.clearIndicatorRange(line, index, line, index + 1, self.indicatorPending)
-            self.fillIndicatorRange(line, index, line, index + 1, self.indicatorSelected)
+            self.clearIndicatorRange(line, index, line, index + 2, self.indicatorPending)
+            self.fillIndicatorRange(line, index, line, index + 2, self.indicatorSelected)
             self.set_marker_selected(line)
 
     def mark_location(self, o):
@@ -271,6 +272,7 @@ class MeltSourceViewer(QsciScintilla):
             self.markers_counter[line] = 0
         self.marklocations[o['marknum']] = {'line': line, 'index': index}
         self.indicators[str(line) + ":" + str(index)] = o
+        self.indicators[str(line) + ":" + str(index + 1)] = o
         self.switch_marklocation_pending(o['marknum'], True)
         # print self.file['filename'], "::adding marker on line", line
 
