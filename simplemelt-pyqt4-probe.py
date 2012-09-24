@@ -25,6 +25,7 @@ import argparse
 import select
 import pprint
 import re
+import logging
 from datetime import datetime
 from threading import Thread
 from PyQt4.QtGui import *
@@ -50,6 +51,12 @@ MELT_SIGNAL_INFOLOC_COMPLETE = SIGNAL("infolocComplete(PyQt_PyObject)")
 MELT_SIGNAL_INFOLOC_QUIT = SIGNAL("quitInfoloc()")
 
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
+
+logger = logging.getLogger('melt-probe')
+console = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console.setFormatter(formatter)
+logger.addHandler(console)
 
 class MeltInfoLoc(QMainWindow):
     INFOLOC_IDENT_RE = re.compile(r"(\d+):(.*)")
@@ -79,7 +86,7 @@ class MeltInfoLoc(QMainWindow):
         self.show()
 
     def push_infolocation(self, obj):
-        print "push_infolocation(", obj,")"
+        logger.debug("push_infolocation(%(obj)s)" % {'obj': obj})
         ident = obj['payload'][0].replace('"', '')
         payload = obj['payload'][1].replace('"', '').split("\\n")
 
@@ -87,9 +94,9 @@ class MeltInfoLoc(QMainWindow):
         if getident:
             id = getident.group(1)
             marknum_key = str(obj['marknum']) + ":" + str(id)
-            print "Checking for previously handled", marknum_key, "..."
+            logger.debug("Checking for previously handled %(marknum_key)s ..." % {'marknum_key': marknum_key})
             if self.handled_marknums.has_key(marknum_key):
-                print "Already handled", marknum_key, "not duplicating."
+                logger.debug("Already handled %(marknum_key)s not duplicating." % {'marknum_key': marknum_key})
                 return
 
             block = getident.group(2)
@@ -228,7 +235,7 @@ class MeltSourceViewer(QsciScintilla):
         self.markerAdd(line, stateTo)
 
     def set_marker_pending(self, line, init):
-        print "entering set_marker_pending, counter:", self.markers_counter[line]
+        logger.debug("entering set_marker_pending, line: %(line)d counter: %(counter)d" % {'line': line, 'counter': self.markers_counter[line]})
 
         change = init
         if not init:
@@ -239,13 +246,13 @@ class MeltSourceViewer(QsciScintilla):
         if change:
             self.set_marker(line, self.ARROW_MARKER_SELECTED, self.ARROW_MARKER_PENDING)
 
-        print "leaving set_marker_pending, counter:", self.markers_counter[line]
+        logger.debug("leaving set_marker_pending, line: %(line)d counter: %(counter)d" % {'line': line, 'counter': self.markers_counter[line]})
 
     def set_marker_selected(self, line):
-        print "entering set_marker_selected, counter:", self.markers_counter[line]
+        logger.debug("entering set_marker_selected, line: %(line)d counter: %(counter)d" % {'line': line, 'counter': self.markers_counter[line]})
         self.markers_counter[line] += 1
         self.set_marker(line, self.ARROW_MARKER_PENDING, self.ARROW_MARKER_SELECTED)
-        print "leaving set_marker_selected, counter:", self.markers_counter[line]
+        logger.debug("leaving set_marker_selected, line: %(line)d counter: %(counter)d" % {'line': line, 'counter': self.markers_counter[line]})
 
     def switch_marklocation_pending(self, marknum, init = False):
         pos = self.marknum_to_lineindex(marknum)
@@ -274,7 +281,7 @@ class MeltSourceViewer(QsciScintilla):
         self.indicators[str(line) + ":" + str(index)] = o
         self.indicators[str(line) + ":" + str(index + 1)] = o
         self.switch_marklocation_pending(o['marknum'], True)
-        # print self.file['filename'], "::adding marker on line", line
+        logger.debug("Adding marker on line %(line)d of file %(file)s" % {'file': self.file['filename'], 'line': line})
 
     def on_margin_clicked(self, nmargin, nline, modifiers):
         # Toggle marker for the line the margin was clicked on
@@ -284,18 +291,17 @@ class MeltSourceViewer(QsciScintilla):
             self.markerAdd(nline, self.ARROW_MARKER_NUM)
 
     def on_indicator_clicked(self, line, index, state):
-        # print "on_indicator_clicked(", self, ", ", line, ", ", index, ", ", state, ")"
+        logger.debug("on_indicator_clicked(%(line)d, %(index)d, %(state)s)" % {'line': line, 'index': index, 'state': state})
         indic = self.indicators[str(line) + ":" + str(index)]
         self.emit(MELT_SIGNAL_SOURCE_INFOLOCATION, indic)
 
     def slot_marklocation(self, o):
-        #print "marknum==", o['marknum']
         if (self.file['filenum'] == o['filenum']):
             self.mark_location(o)
 
     def slot_startinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
-            # print "slot_startinfolocation(", o,")"
+            logger.debug("slot_startinfolocation(%(o)s)" % {'o': o})
             try:
                 w = self.infolocs[o['marknum']]
                 w.raise_()
@@ -310,7 +316,7 @@ class MeltSourceViewer(QsciScintilla):
 
     def slot_addinfolocation(self, o):
         if (self.file['filenum'] == o['filenum']):
-            # print "slot_addinfolocation(", o,")"
+            logger.debug("slot_addinfolocation(%(o)s)" % {'o': o})
             w = self.infolocs[o['marknum']]
             if w is not None:
                 w.push_infolocation(o)
@@ -342,10 +348,10 @@ class MeltCommandDispatcher(QObject, Thread):
         print "I'm", self.getName()
 
     def slot_unhandledCommand(self, cmd):
-        print "E: Unhandled command:", cmd
+        logger.error("Unhandled command: %(comm)s" % {'comm': comm})
 
     def slot_dispatchCommand(self, comm):
-        print "Dispatcher receive:", comm
+        logger.debug("Dispatcher receive: %(comm)s" % {'comm': comm})
 
         o = comm.split(" ")
         self.emit(MELT_SIGNAL_APPEND_TRACE_COMMAND, o)
@@ -403,7 +409,7 @@ class MeltCommandDispatcher(QObject, Thread):
                 return
             self.QUEUE_INFOLOC_MUTEX.unlock()
 
-        print "Dispatcher emit:", sig, obj
+        logger.debug("Dispatcher emit: %(sig)s %(obj)s" % {'sig': sig, 'obj': obj})
 
         self.emit(sig, obj)
 
@@ -414,7 +420,7 @@ class MeltCommandDispatcher(QObject, Thread):
         self.QUEUE_MARKLOCATION_MUTEX.lock()
         try:
             queue = self.QUEUE_MARKLOCATION[filenum]
-            # print "SHOWFILE has been completed for", filenum, "QUEUED:", queue
+            logger.debug("SHOWFILE has been completed for %(filenum)s QUEUED %(queue)s" % {'filenum': filenum, 'queue': queue})
             for obj in queue:
                 self.emit(MELT_SIGNAL_SOURCE_MARKLOCATION, obj)
         except KeyError as e:
@@ -426,7 +432,7 @@ class MeltCommandDispatcher(QObject, Thread):
     def slot_infolocComplete(self, marknum):
         self.QUEUE_INFOLOC_MUTEX.lock()
         queue = self.QUEUE_INFOLOC[marknum]
-        # print "INFOLOC has been completed for", marknum, "QUEUED:", queue
+        logger.debug("INFOLOC has been completed for %(marknum)s QUEUED %(queue)s" % {'marknum': marknum, 'queue': queue})
         for obj in queue:
             self.emit(MELT_SIGNAL_SOURCE_ADDINFOLOC, obj)
         self.INFOLOC_READY[marknum] = True
@@ -578,10 +584,10 @@ class MeltSourceWindow(QMainWindow, Thread):
             searchBar.hide()
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
-            # print "mapping",o['filenum'],"with object:",txt.objectName()
+            logger.debug("Mapping %(filenum)s with object %(object)s" % {'filenum': o['filenum'], 'object': txt.objectName()})
             self.emit(MELT_SIGNAL_SHOWFILE_COMPLETE, o['filenum'])
         else:
-            print "Unable to open '%(file)s'" % {'file': o['filename']}
+            logger.error("Unable to open '%(file)s'" % {'file': o['filename']})
             return
             err = QErrorMessage("Unable to open '%(file)s'" % {'file': o['filename']})
             err.showMessage()
@@ -632,6 +638,14 @@ class MeltProbeApplication(QApplication):
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.parse_args()
+
+        logger.setLevel(logging.ERROR)
+        console.setLevel(logging.ERROR)
+
+        if (self.args.D):
+            logger.setLevel(logging.DEBUG)
+            console.setLevel(logging.DEBUG)
+
         self.main()
 
     def main(self):
