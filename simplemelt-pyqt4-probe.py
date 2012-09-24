@@ -410,10 +410,14 @@ class MeltCommandDispatcher(QObject, Thread):
 
     def slot_showfileComplete(self, filenum):
         self.QUEUE_MARKLOCATION_MUTEX.lock()
-        queue = self.QUEUE_MARKLOCATION[filenum]
-        # print "SHOWFILE has been completed for", filenum, "QUEUED:", queue
-        for obj in queue:
-            self.emit(MELT_SIGNAL_SOURCE_MARKLOCATION, obj)
+        try:
+            queue = self.QUEUE_MARKLOCATION[filenum]
+            # print "SHOWFILE has been completed for", filenum, "QUEUED:", queue
+            for obj in queue:
+                self.emit(MELT_SIGNAL_SOURCE_MARKLOCATION, obj)
+        except KeyError as e:
+            # nothing has been put in queue, bypassing
+            pass
         self.SHOWFILE_READY[filenum] = True
         self.QUEUE_MARKLOCATION_MUTEX.unlock()
 
