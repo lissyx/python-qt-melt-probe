@@ -52,6 +52,7 @@ MELT_SIGNAL_INFOLOC_COMPLETE = SIGNAL("infolocComplete(PyQt_PyObject)")
 MELT_SIGNAL_INFOLOC_QUIT = SIGNAL("quitInfoloc()")
 
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
+MELT_SIGNAL_UPDATECURRENT = SIGNAL("updateCurrent(PyQt_PyObject)")
 
 MELT_SIGNAL_GETVERSION = SIGNAL("getVersion(PyQt_PyObject)")
 
@@ -531,6 +532,7 @@ class MeltSourceWindow(QMainWindow, Thread):
     LBL_REVISION = "Revision: %(revision)s"
     INDICATORS = {}
     CURRENT_INDICATOR = {}
+    LBL_CURRENT = "Current: %(cur)d"
 
     def __init__(self, dispatcher, comm):
         Thread.__init__(self)
@@ -544,6 +546,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
         QObject.connect(self.dispatcher, MELT_SIGNAL_GETVERSION, self.slot_getversion, Qt.QueuedConnection)
         QObject.connect(self, MELT_SIGNAL_UPDATECOUNT, self.slot_updateCount, Qt.QueuedConnection)
+        QObject.connect(self, MELT_SIGNAL_UPDATECURRENT, self.slot_updateCurrent, Qt.QueuedConnection)
         self.daemon = True
         self.start()
 
@@ -576,6 +579,9 @@ class MeltSourceWindow(QMainWindow, Thread):
     def get_count(self, filenum):
         return self.LBL_COUNT % {'cnt': self.COUNTS[filenum]}
 
+    def get_current(self, filenum):
+        return self.LBL_CURRENT % {'cur': self.CURRENT_INDICATOR[filenum]}
+
     def slot_showfile(self, o):
         qw = QWidget()
         layout = QVBoxLayout()
@@ -592,6 +598,12 @@ class MeltSourceWindow(QMainWindow, Thread):
             self.COUNTS[o['filenum']] = 0
             cnt = QLabel(self.get_count(o['filenum']))
             cnt.setObjectName("count")
+            self.CURRENT_INDICATOR[o['filenum']] = 0
+            cur = QLabel(self.get_current(o['filenum']))
+            cur.setObjectName("current")
+            hlayout = QHBoxLayout()
+            hlayout.addWidget(cnt)
+            hlayout.addWidget(cur)
             searchBar = QToolBar()
             searchBar.setObjectName("search")
             prevIndic = searchBar.addAction("<", self.slot_prevIndicator)
@@ -613,7 +625,7 @@ class MeltSourceWindow(QMainWindow, Thread):
             QObject.connect(self, MELT_SIGNAL_MOVE_TO_INDICATOR, txt.slot_moveToIndicator, Qt.QueuedConnection)
             layout.addWidget(lbl)
             layout.addWidget(txt)
-            layout.addWidget(cnt)
+            layout.addLayout(hlayout)
             layout.addWidget(searchBar)
             # searchBar.hide()
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
@@ -641,6 +653,11 @@ class MeltSourceWindow(QMainWindow, Thread):
         cnt = self.filemaps[fnum].findChild(QLabel, "count")
         if cnt:
             cnt.setText(self.get_count(fnum))
+
+    def slot_updateCurrent(self, fnum):
+        cur = self.filemaps[fnum].findChild(QLabel, "current")
+        if cur:
+            cur.setText(self.get_current(fnum))
 
     def keyReleaseEvent(self, ev):
         if (ev.modifiers() == Qt.ControlModifier and ev.key() == Qt.Key_F):
@@ -702,6 +719,7 @@ class MeltSourceWindow(QMainWindow, Thread):
             indic = self.INDICATORS[file][id]
             logger.debug("Moving indicator of %(file)s to %(pos)d at (%(line)d,%(col)d)" % {'file': file, 'pos': id, 'line': indic['line'], 'col': indic['col']})
             self.emit(MELT_SIGNAL_MOVE_TO_INDICATOR, indic)
+            self.emit(MELT_SIGNAL_UPDATECURRENT, file)
         else:
             logger.error("No indicator %(id)d" % {'id': id})
 
