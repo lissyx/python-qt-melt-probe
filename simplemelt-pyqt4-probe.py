@@ -555,7 +555,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         qw.setLayout(layout)
 
         if o['filename'] == "/dev/null":
-            sys.stderr.write('Cannot open /dev/null, exiting.')
+            logger.error('Cannot open /dev/null, exiting.')
             sys.exit(0)
 
         if os.path.exists(o['filename']) or (o['filename'].startswith("<") and o['filename'].endswith(">")):
