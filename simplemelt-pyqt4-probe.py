@@ -52,6 +52,8 @@ MELT_SIGNAL_INFOLOC_QUIT = SIGNAL("quitInfoloc()")
 
 MELT_SIGNAL_UPDATECOUNT = SIGNAL("updateCount(PyQt_PyObject)")
 
+MELT_SIGNAL_GETVERSION = SIGNAL("getVersion(PyQt_PyObject)")
+
 logger = logging.getLogger('melt-probe')
 console = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -408,6 +410,12 @@ class MeltCommandDispatcher(QObject, Thread):
                 self.QUEUE_INFOLOC_MUTEX.unlock()
                 return
             self.QUEUE_INFOLOC_MUTEX.unlock()
+        elif cmd == "SETSTATUS_PCD":
+            # ['SETSTATUS_PCD', '', '"MELT', 'version=0.9.6-d', '[melt-branch_revision_190124]"', '', '']
+            version = o[3].split('=')[1]
+            rev = o[4].replace('"', "").replace("[", "").replace("]", "")
+            obj = {'command': 'setstatus', 'version': version, 'rev': rev}
+            sig = MELT_SIGNAL_GETVERSION
 
         logger.debug("Dispatcher emit: %(sig)s %(obj)s" % {'sig': sig, 'obj': obj})
 
@@ -511,6 +519,8 @@ class MeltTraceWindow(QMainWindow, Thread):
 class MeltSourceWindow(QMainWindow, Thread):
     LBL_COUNT = "Count: %(cnt)d"
     COUNTS = {}
+    LBL_VERSION = "Version: %(version)s"
+    LBL_REVISION = "Revision: %(revision)s"
 
     def __init__(self, dispatcher, comm):
         Thread.__init__(self)
@@ -521,6 +531,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.initUI()
 
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
+        QObject.connect(self.dispatcher, MELT_SIGNAL_GETVERSION, self.slot_getversion, Qt.QueuedConnection)
         QObject.connect(self, MELT_SIGNAL_UPDATECOUNT, self.slot_updateCount, Qt.QueuedConnection)
         self.daemon = True
         self.start()
@@ -528,7 +539,9 @@ class MeltSourceWindow(QMainWindow, Thread):
     def initUI(self):
         window = QWidget()
         self.tabs = QTabWidget()
+        self.header = QHBoxLayout()
         self.vlayout = QVBoxLayout()
+        self.vlayout.addLayout(self.header)
         self.vlayout.addWidget(self.tabs)
         window.setLayout(self.vlayout)
         window.show()
@@ -537,6 +550,8 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.setWindowTitle("MELT Source Window - PID:PPID=%(pid)d:%(ppid)d @%(host)s" % {'pid': os.getpid(), 'ppid': os.getppid(), 'host': os.uname()[1]})
 
         self.show()
+
+        self.comm.send_melt_command("VERSION_prq")
 
     def run(self):
         print "I'm", self.getName()
@@ -630,6 +645,13 @@ class MeltSourceWindow(QMainWindow, Thread):
         if searchText and findText.length() > 1:
             searchText.setCursorPosition(0, 0)
             searchText.findFirst(findText, False, False, False, False)
+
+    def slot_getversion(self, obj):
+        logger.debug("Received version: %(version)s; revision: %(revision)s" % {'version': obj['version'], 'revision': obj['rev']})
+        self.version = QLabel(self.LBL_VERSION % {'version': obj['version']})
+        self.revision = QLabel(self.LBL_REVISION % {'revision': obj['rev']})
+        self.header.addWidget(self.version)
+        self.header.addWidget(self.revision)
 
 class MeltProbeApplication(QApplication):
     TRACE_WINDOW = None
