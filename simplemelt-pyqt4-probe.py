@@ -652,7 +652,15 @@ class MeltSourceWindow(QMainWindow, Thread):
             else:
                 searchBar.hide()
         else:
-            self.start_search()
+            if self.tabs.currentWidget().findChild(QLineEdit).hasFocus():
+                self.start_search()
+            else:
+                logger.debug("Received key: %(key)s" % {'key': ev.key()})
+                if ev.key() == Qt.Key_N:
+                    if ev.modifiers() == Qt.ShiftModifier:
+                        self.slot_prevIndicator()
+                    else:
+                        self.slot_nextIndicator()
 
     def slot_searchNext(self):
         searchText = self.tabs.currentWidget().findChild(MeltSourceViewer)
