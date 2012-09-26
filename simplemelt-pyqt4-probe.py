@@ -348,7 +348,7 @@ class MeltCommandDispatcher(QObject, Thread):
         print "I'm", self.getName()
 
     def slot_unhandledCommand(self, cmd):
-        logger.error("Unhandled command: %(comm)s" % {'comm': comm})
+        logger.error("Unhandled command: %(comm)s" % {'comm': cmd})
 
     def slot_dispatchCommand(self, comm):
         logger.debug("Dispatcher receive: %(comm)s" % {'comm': comm})
