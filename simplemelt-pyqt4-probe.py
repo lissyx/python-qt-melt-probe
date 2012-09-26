@@ -40,6 +40,7 @@ MELT_SIGNAL_SOURCE_SHOWFILE = SIGNAL("sourceShowfile(PyQt_PyObject)")
 MELT_SIGNAL_SOURCE_MARKLOCATION = SIGNAL("sourceMarklocation(PyQt_PyObject)")
 MELT_SIGNAL_SOURCE_INFOLOCATION = SIGNAL("sourceInfoLocation(PyQt_PyObject)")
 MELT_SIGNAL_ASK_INFOLOCATION = SIGNAL("askInfoLocation(PyQt_PyObject)")
+MELT_SIGNAL_MOVE_TO_INDICATOR = SIGNAL("moveToIndicator(PyQt_PyObject)")
 
 MELT_SIGNAL_SOURCE_STARTINFOLOC = SIGNAL("startInfoLocation(PyQt_PyObject)")
 MELT_SIGNAL_SOURCE_ADDINFOLOC = SIGNAL("addInfoLocation(PyQt_PyObject)")
@@ -329,6 +330,13 @@ class MeltSourceViewer(QsciScintilla):
             self.infolocs.pop(marknum)
             self.switch_marklocation_pending(marknum)
 
+    def slot_moveToIndicator(self, indic):
+        if (self.file['filenum'] == indic['filenum']):
+            logger.debug("Received a request to move to indicator: %(indic)s" % {'indic': indic})
+            self.setCursorPosition(indic['line'], indic['col'])
+            self.setCaretLineVisible(True)
+            self.setCaretLineBackgroundColor(QColor("#ffe4e4"))
+
 class MeltCommandDispatcher(QObject, Thread):
     FILES = {}
     MARKS = {}
@@ -521,6 +529,8 @@ class MeltSourceWindow(QMainWindow, Thread):
     COUNTS = {}
     LBL_VERSION = "Version: %(version)s"
     LBL_REVISION = "Revision: %(revision)s"
+    INDICATORS = {}
+    CURRENT_INDICATOR = {}
 
     def __init__(self, dispatcher, comm):
         Thread.__init__(self)
@@ -528,6 +538,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.dispatcher = dispatcher
         self.comm = comm
         self.filemaps = {}
+        self.filemaps_reverse = {}
         self.initUI()
 
         QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_SHOWFILE, self.slot_showfile, Qt.QueuedConnection)
@@ -583,9 +594,15 @@ class MeltSourceWindow(QMainWindow, Thread):
             cnt.setObjectName("count")
             searchBar = QToolBar()
             searchBar.setObjectName("search")
-            searchText = QLineEdit()
-            searchBar.addWidget(searchText)
+            prevIndic = searchBar.addAction("<", self.slot_prevIndicator)
+            prevIndic.setToolTip("Go to previous GCC mark")
+            nextIndic = searchBar.addAction(">", self.slot_nextIndicator)
+            nextIndic.setToolTip("Go to next GCC mark")
             searchBar.addSeparator()
+            searchLabel = QLabel("Search: ")
+            searchText = QLineEdit()
+            searchBar.addWidget(searchLabel)
+            searchBar.addWidget(searchText)
             searchReset = searchBar.addAction("Reset", self.slot_searchReset)
             searchNext = searchBar.addAction("Next", self.slot_searchNext)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_MARKLOCATION, txt.slot_marklocation, Qt.QueuedConnection)
@@ -593,13 +610,15 @@ class MeltSourceWindow(QMainWindow, Thread):
             QObject.connect(txt, MELT_SIGNAL_INFOLOC_COMPLETE, self.dispatcher.slot_infolocComplete, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_STARTINFOLOC, txt.slot_startinfolocation, Qt.QueuedConnection)
             QObject.connect(self.dispatcher, MELT_SIGNAL_SOURCE_ADDINFOLOC, txt.slot_addinfolocation, Qt.QueuedConnection)
+            QObject.connect(self, MELT_SIGNAL_MOVE_TO_INDICATOR, txt.slot_moveToIndicator, Qt.QueuedConnection)
             layout.addWidget(lbl)
             layout.addWidget(txt)
             layout.addWidget(cnt)
             layout.addWidget(searchBar)
-            searchBar.hide()
+            # searchBar.hide()
             self.tabs.addTab(qw, "[%(fnum)s] %(filename)s" % {'fnum': o['filenum'], 'filename': self.get_filename(o['filename'])})
             self.filemaps[o['filenum']] = qw
+            self.filemaps_reverse[txt] = o['filenum']
             logger.debug("Mapping %(filenum)s with object %(object)s" % {'filenum': o['filenum'], 'object': txt.objectName()})
             self.emit(MELT_SIGNAL_SHOWFILE_COMPLETE, o['filenum'])
         else:
@@ -610,6 +629,11 @@ class MeltSourceWindow(QMainWindow, Thread):
 
     def slot_marklocation(self, obj):
         self.COUNTS[obj['filenum']] += 1
+        try:
+            self.INDICATORS[obj['filenum']] += [ obj ]
+        except KeyError as e:
+            self.INDICATORS[obj['filenum']] = [ obj ]
+            self.CURRENT_INDICATOR[obj['filenum']] = 0
         self.emit(MELT_SIGNAL_UPDATECOUNT, obj['filenum'])
 
     def slot_updateCount(self, fnum):
@@ -646,6 +670,31 @@ class MeltSourceWindow(QMainWindow, Thread):
         if searchText and findText.length() > 1:
             searchText.setCursorPosition(0, 0)
             searchText.findFirst(findText, False, False, False, False)
+
+    def slot_prevIndicator(self):
+        self.move_indicator(-1)
+
+    def slot_nextIndicator(self):
+        self.move_indicator(1)
+
+    def move_indicator(self, sens):
+        searchText = self.tabs.currentWidget().findChild(MeltSourceViewer)
+        if searchText:
+            try:
+                filenum = self.filemaps_reverse[searchText]
+                newpos = (self.CURRENT_INDICATOR[filenum] + sens) % len(self.INDICATORS[filenum])
+                self.CURRENT_INDICATOR[filenum] = newpos
+                self.set_indicator(filenum, newpos)
+            except KeyError as e:
+                logger.error("Could not find associated file with %(obj)s" % {'obj': searchText})
+
+    def set_indicator(self, file, id):
+        if self.INDICATORS[file][id]:
+            indic = self.INDICATORS[file][id]
+            logger.debug("Moving indicator of %(file)s to %(pos)d at (%(line)d,%(col)d)" % {'file': file, 'pos': id, 'line': indic['line'], 'col': indic['col']})
+            self.emit(MELT_SIGNAL_MOVE_TO_INDICATOR, indic)
+        else:
+            logger.error("No indicator %(id)d" % {'id': id})
 
     def slot_getversion(self, obj):
         logger.debug("Received version: %(version)s; revision: %(revision)s" % {'version': obj['version'], 'revision': obj['rev']})
