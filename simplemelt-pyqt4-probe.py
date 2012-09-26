@@ -539,6 +539,7 @@ class MeltSourceWindow(QMainWindow, Thread):
     def initUI(self):
         window = QWidget()
         self.tabs = QTabWidget()
+        self.tabs.setTabPosition(QTabWidget.West)
         self.header = QHBoxLayout()
         self.vlayout = QVBoxLayout()
         self.vlayout.addLayout(self.header)
