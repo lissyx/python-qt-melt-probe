@@ -631,6 +631,7 @@ class MeltSourceWindow(QMainWindow, Thread):
         self.COUNTS[obj['filenum']] += 1
         try:
             self.INDICATORS[obj['filenum']] += [ obj ]
+            self.INDICATORS[obj['filenum']].sort(key=lambda x: x['line'], reverse=False)
         except KeyError as e:
             self.INDICATORS[obj['filenum']] = [ obj ]
             self.CURRENT_INDICATOR[obj['filenum']] = 0
